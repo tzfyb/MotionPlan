@@ -1,12 +1,8 @@
 package planner;
 
-import java.awt.Polygon;
 import java.awt.Rectangle;
-import java.awt.geom.Area;
 import java.util.ArrayList;
 import java.util.List;
-
-import planner.ArmProblem.ArmProblemNode;
 
 public class World {
 	protected int width, height;
@@ -30,6 +26,7 @@ public class World {
 	}
 	
 	public List<Rectangle> getObstacles(){return obstacles;}
-	
+	public int getWidth(){return width;}
+	public int getHeight(){return height;}
 
 }

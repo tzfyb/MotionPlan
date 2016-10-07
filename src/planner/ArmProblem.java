@@ -4,14 +4,11 @@ import java.awt.Polygon;
 import java.awt.Rectangle;
 import java.awt.geom.Area;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.PriorityQueue;
 import java.util.Random;
-
-import planner.ArmProblem.ArmProblemNode;
 
 public class ArmProblem extends SearchProblem {
 	// base x, y
