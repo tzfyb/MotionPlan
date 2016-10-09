@@ -7,13 +7,11 @@ import java.util.List;
 public class World {
 	protected int width, height;
 	protected List<Rectangle> obstacles;
-	protected List<Rectangle> walls;
 	
 	public World(int w, int h){
 		width = w;
 		height = h;
 		obstacles = new ArrayList<Rectangle>();
-		walls = new ArrayList<Rectangle>();
 	}
 	
 	//add the obstacle with x y as the center
@@ -21,8 +19,8 @@ public class World {
 	public void addObs(int x, int y, int width){
 		obstacles.add(new Rectangle(x, y, width, width));
 	}
-	public void addWall(Rectangle wall){
-		walls.add(wall);
+	public void addWall(int x, int y, int width, int height){
+		obstacles.add(new Rectangle(x, y, width, height));
 	}
 	
 	public List<Rectangle> getObstacles(){return obstacles;}

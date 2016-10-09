@@ -23,43 +23,89 @@ public class ArmProblem extends SearchProblem {
 	protected double[] start_config;
 	// Goal
 	protected double[] goal_config;
+	//step ratio, how accuracy the collision test will be
+	protected double step_ratio;
 	// World grid
 	protected World world;
 	protected int k_neigh; // number of neighbors
 	protected int density; // number of sample points to be generated
 	protected HashSet<ArmProblemNode> samples;
 	protected HashMap<ArmProblemNode, HashSet<ArmProblemNode>> adjList;
+	
+	public static void main(String[] args){
+		World world = new World(300, 300);
+		world.addObs(35, 35, 80);
+		world.addObs(185, 35, 80);
+		world.addObs(35, 185, 80);
+		world.addObs(185, 185, 80);
+		
+		double[] base = {150, 150};
+		double[] start = new double[2];
+		start[0] = 0.7250157773431886;
+		start[1] = 0.4678358522216472;
+		double[] goal = new double[2];
+		goal[0] = 0;
+		goal[0] = 0;
+		ArmProblem test = new ArmProblem(2, start, goal, base, world, 3, 100, 0.2, 2016);
+		test.setBase(world.width / 2, world.height / 2);
+		if(test.getStart().armCollision(world))
+			System.out.println("Collision!");
+		else
+			System.out.println("Nothing");
+	}
+	
 
-	public ArmProblem(int num, double[] s, double[] g, double[] link_length, World w, int k, int d) {
+	public ArmProblem(int num, double[] s, double[] g, double[] b, World w, int k, int d, double sr, long seed) {
 		base = new double[2];
-		base[0] = 0;
-		base[1] = 0;
-		link_len = link_length;
+		base[0] = b[0];
+		base[1] = b[1];
 		width = 10;
-		start_config = s;
-		goal_config = g;
+		link_num = num;
+		//set start and goal configuration
+		start_config = new double[link_num];
+		for(int i = 0; i < link_num; i++)
+			start_config[i] = s[i];
+		goal_config = new double[link_num];
+		for(int i = 0; i < link_num; i++)
+			goal_config[i] = g[i];
+		//set link length
+		link_len = new double[link_num];
+		for(int i = 0; i < link_num; i++)
+			link_len[i] = 30;
 		world = w;
 		k_neigh = k;
 		samples = new HashSet<ArmProblemNode>();
 		adjList = new HashMap<>();
 		density = d;
+		startNode = new ArmProblemNode(start_config, 0, this);
+		step_ratio = sr;
+		
+		sampling(seed);
+		System.out.println("Sampling Done");
+		System.out.println("Constructing Map...");
+		constructMap();
 	}
 
 	// sampling the points in configuration space
 	public void sampling(long seed) {
 		Random rd = new Random(seed);
-		samples.add(new ArmProblemNode(start_config));
-		samples.add(new ArmProblemNode(goal_config));
+		samples.add(new ArmProblemNode(start_config, this));
+		samples.add(new ArmProblemNode(goal_config, this));
+		double[] randConfig = new double[link_num];
 		while (samples.size() < density + 2) {
-			double[] randConfig = new double[link_num];
 			for (int i = 0; i < link_num; i++)
-				randConfig[i] = Math.PI * rd.nextDouble();
-			ArmProblemNode cur = new ArmProblemNode(randConfig);
+				randConfig[i] = Math.PI * 2 * rd.nextDouble();
+			ArmProblemNode cur = new ArmProblemNode(randConfig, this);
 			if (!cur.armCollision(world) && !samples.contains(cur))
 				samples.add(cur);
 		}
 	}
-
+	
+	public ArmProblemNode getStart(){return new ArmProblemNode(start_config, this);}
+	public ArmProblemNode getGoal(){return new ArmProblemNode(goal_config, this);}
+	public HashMap<ArmProblemNode, HashSet<ArmProblemNode>> getAdjList(){return adjList;}
+	public double getStepRatio(){return step_ratio;}
+	
 	// use the local planner to link the points in configuration space
 	public void constructMap() {
 		// To store the goal configuration
@@ -67,16 +113,19 @@ public class ArmProblem extends SearchProblem {
 		for (int i = 0; i < link_num; i++)
 			real_goal[i] = goal_config[i];
 		// Then I can use the compareTo function to get the k nearest points
+		System.out.println("Total Nodes Construct: " + Integer.toString(samples.size()));
+		int curNum = 0;
 		for (ArmProblemNode arm1 : samples) {
 			for (int i = 0; i < link_num; i++)
 				goal_config[i] = arm1.getConfig(i);
 			PriorityQueue<ArmProblemNode> candidtae_neighbours = new PriorityQueue<ArmProblemNode>();
 			for (ArmProblemNode arm2 : samples) {
 				if (!arm1.equals(arm2)) {
-					if (!arm1.armPathCollision(arm2, world, 0.5))
+					if (!arm1.armPathCollision(arm2, world))
 						candidtae_neighbours.add(arm2);
 				}
 			}
+			
 			HashSet<ArmProblemNode> neighbours = new HashSet<ArmProblemNode>();
 			for (int i = 0; i < k_neigh; i++) {
 				if (candidtae_neighbours.peek() != null)
@@ -85,37 +134,72 @@ public class ArmProblem extends SearchProblem {
 					break;
 			}
 			adjList.put(arm1, neighbours);
+			System.out.println(Integer.toString(curNum) + "/" + Integer.toString(samples.size()) + " Done");
+			System.out.flush();
+			//System.out.println(Integer.toString(curNum) + " Done");
+			curNum++;
 		}
 		// restore the goal_config
 		for (int i = 0; i < link_num; i++)
 			goal_config[i] = real_goal[i];
 	}
 
+	public int getLinkNum(){return link_num;}
+	
+	public List<SearchNode> smoothPath(List<SearchNode> path){
+		List<SearchNode> res = new ArrayList<SearchNode>();
+		res.add((ArmProblemNode)(path.get(0)));
+		for(int i = 0; i < path.size() - 1; i++){
+			ArmProblemNode cur = (ArmProblemNode)(path.get(i));
+			ArmProblemNode next = (ArmProblemNode)(path.get(i + 1));
+			res.addAll(cur.localPath(next));
+		}
+		res.add(path.get(path.size() - 1));
+		return res;
+	}
+	
 	public class ArmProblemNode implements SearchNode {
 		private double[] config;
 		private double cost;
+		ArmProblem armRobot;
 
-		public ArmProblemNode(double[] configuration) {
-			config = configuration;
+		public ArmProblemNode(double[] configuration, ArmProblem _armRobot) {
+			config = new double[link_num];
+			for(int i = 0; i < link_num; i++)
+				config[i] = configuration[i];
 			cost = 0;
+			armRobot = _armRobot;
 		}
 
-		public ArmProblemNode(double[] configuration, double c) {
-			config = configuration;
+		public ArmProblemNode(double[] configuration, double c, ArmProblem _armRobot) {
+			config = new double[link_num];
+			for(int i = 0; i < link_num; i++)
+				config[i] = configuration[i];
 			cost = c;
+			armRobot = _armRobot;
 		}
 
 		public int getLinkNum() {
 			return link_num;
 		}
 
+		public String toString(){
+			StringBuilder res = new StringBuilder();
+			res.append('[');
+			for(int i = 0; i < link_num - 1; i++)
+				res.append(Double.toString(config[i]) + ", ");
+			res.append(Double.toString(config[link_num - 1]));
+			res.append(']');
+			return res.toString();
+			
+		}
 		// get the Manhattan distance of two angles
 		private double manhattan(double ang1, double ang2) {
 			double res = Math.abs(ang1 - ang2);
-			if (res > Math.PI)
+			/*if (res > Math.PI)
 				return 2 * Math.PI - res;
-			else
-				return res;
+			else*/
+				return res % (Math.PI * 2);
 		}
 
 		public double getConfig(int i) {
@@ -123,7 +207,10 @@ public class ArmProblem extends SearchProblem {
 		}
 
 		public double[] getConfig() {
-			return config;
+			double[] retConfig = new double[link_num];
+			for(int i = 0; i < link_num; i++)
+				retConfig[i] = config[i];
+			return retConfig;
 		}
 
 		public void setConfig(int i, double ang) {
@@ -131,8 +218,10 @@ public class ArmProblem extends SearchProblem {
 		}
 
 		// Get the rectangle (coordinates from four vertices)
-		public double[][] getRec(int i) {
-			double[][] rect = new double[4][2];
+		//the flag 'transform' determine whether we need to
+		//transform the coordinate system to a JPanel 2D
+		//coordinate system
+		public Polygon getRec(int i, boolean transform) {
 
 			double x = base[0];
 			double y = base[1];
@@ -152,26 +241,38 @@ public class ArmProblem extends SearchProblem {
 			// the edge as another arm with length = width / 2. The order of the
 			// vertices are counter-clockwise, which are, top-left, top-right,
 			// bottom-right and bottom left of the rectangle.
-			rect[0][0] = x_next + width / 2 * Math.cos(ang + Math.PI / 2);
-			rect[0][1] = y_next + width / 2 * Math.sin(ang + Math.PI / 2);
-			rect[1][0] = x_next + width / 2 * Math.cos(ang + Math.PI * 1.5);
-			rect[1][1] = x_next + width / 2 * Math.sin(ang + Math.PI * 1.5);
-			rect[2][0] = x + width / 2 * Math.cos(ang + Math.PI * 1.5);
-			rect[2][1] = x + width / 2 * Math.sin(ang + Math.PI * 1.5);
-			rect[3][0] = x + width / 2 * Math.cos(ang + Math.PI / 2);
-			rect[3][1] = y + width / 2 * Math.sin(ang + Math.PI / 2);
+			int[] xpoints = new int[4];
+			int[] ypoints = new int[4];
+			xpoints[0] = (int)(x_next + width / 2 * Math.cos(ang + Math.PI / 2));
+			ypoints[0] = (int)(y_next + width / 2 * Math.sin(ang + Math.PI / 2));
+			xpoints[1] = (int)(x_next + width / 2 * Math.cos(ang + Math.PI * 1.5));
+			ypoints[1] = (int)(y_next + width / 2 * Math.sin(ang + Math.PI * 1.5));
+			xpoints[2] = (int)(x + width / 2 * Math.cos(ang + Math.PI * 1.5));
+			ypoints[2] = (int)(y + width / 2 * Math.sin(ang + Math.PI * 1.5));
+			xpoints[3] = (int)(x + width / 2 * Math.cos(ang + Math.PI / 2));
+			ypoints[3] = (int)(y + width / 2 * Math.sin(ang + Math.PI / 2));
 
-			return rect;
+			if(transform){
+				for(int j = 0; j < 4; j++)
+					ypoints[j] = (int)base[1] - (ypoints[j] - (int)base[1]);
+			}
+			return new Polygon(xpoints, ypoints, 4);
+		}
+		
+		//Get all the link polygons
+		List<Polygon> getAllPoly(boolean transform){
+			List<Polygon> res = new ArrayList<Polygon>();
+			for(int i = 0; i < link_num; i++){
+				res.add(getRec(i, transform));
+			}
+			return res;
 		}
 
 		// check if the arm is collide with any of the obstacle
 		public boolean armCollision(World world) {
 			ArrayList<Area> links = new ArrayList<Area>();
 			for (int i = 0; i < link_num; i++) {
-				Polygon cur = new Polygon();
-				double[][] rect = getRec(i);
-				for (int j = 0; j < 4; j++)
-					cur.addPoint((int) Math.round(rect[j][0]), (int) Math.round(rect[j][1]));		
+				Polygon cur = getRec(i, true);		
 				links.add(new Area(cur));
 			}
 			List<Rectangle> obstacles = world.getObstacles();
@@ -187,17 +288,17 @@ public class ArmProblem extends SearchProblem {
 		// check if the path between two configuration states is in collision
 		// with any of the obstacle. The main idea is to divide the path
 		// into small intermediate steps and check each step's collision
-		public boolean armPathCollision(ArmProblemNode other, World world, double step_ratio) {
-			Double[] vol = armLocalPlanner(other, step_ratio);
+		public boolean armPathCollision(ArmProblemNode other, World world) {
+			Double[] vol = armLocalPlanner(other);
 			double time = (other.getConfig(0) - config[0]) / vol[0];
-			ArmProblemNode test = new ArmProblemNode(config);
+			ArmProblemNode test = new ArmProblemNode(config, armRobot);
 			double curTime = 0;
 			while (curTime < time) {
 				if (test.armCollision(world))
 					return true;
 				for (int i = 0; i < link_num; i++)
 					test.setConfig(i, test.getConfig(i) + vol[i]);
-				curTime += step_ratio;
+				curTime += armRobot.getStepRatio();
 			}
 			return false;
 		}
@@ -207,16 +308,33 @@ public class ArmProblem extends SearchProblem {
 		// = 1 PI per step, where the step is determined by the step size. The
 		// less
 		// the step ratio is, the more accuracy the local planner will be
-		private Double[] armLocalPlanner(ArmProblemNode other, double step_ratio) {
+		private Double[] armLocalPlanner(ArmProblemNode other) {
 			double max_move = 0;
 			for (int i = 0; i < link_num; i++)
 				max_move = Math.max(max_move, Math.abs(config[i] - other.getConfig(i)));
 			Double[] v = new Double[link_num];
 			for (int i = 0; i < link_num; i++)
-				v[i] = (other.getConfig(i) - config[i]) / max_move * step_ratio;
+				v[i] = (other.getConfig(i) - config[i]) / max_move * armRobot.getStepRatio();
 			return v;
 		}
+		
+		public List<ArmProblemNode> localPath(ArmProblemNode other){
+			Double[] vol = armLocalPlanner(other);
+			List<ArmProblemNode> locPath = new ArrayList<ArmProblemNode>();
+			double[] nextConfig = new double[armRobot.getLinkNum()];
+			for(int i = 0; i < armRobot.getLinkNum(); i++)
+				nextConfig[i] = this.getConfig(i);
+			double time = (other.getConfig(0) - config[0]) / vol[0];
+			for(int curTime = 1; curTime < time; curTime++){
+				for(int i = 0; i < armRobot.getLinkNum(); i++)
+					nextConfig[i] += vol[i];
+				locPath.add(new ArmProblemNode(nextConfig, armRobot));
+			}
+			locPath.add(other);
+			return locPath;
+		}
 
+		
 		@Override
 		public int compareTo(SearchNode arg0) {
 			// TODO Auto-generated method stub
@@ -225,26 +343,31 @@ public class ArmProblem extends SearchProblem {
 
 		@Override
 		public boolean equals(Object o) {
-			double res = 0;
 			for (int i = 0; i < link_num; i++)
-				res += manhattan(config[i], ((ArmProblemNode) o).getConfig(i));
-			return res < 1;
+				if(config[i] != ((ArmProblemNode) o).getConfig(i))
+					return false;
+			return true;
 		}
 
 		@Override
 		public int hashCode() {
-			return config.hashCode();
+			int code = 0;
+			for(int i = 0; i < link_num; i++)
+				code += Math.pow(config[i], Math.pow(37, i));
+			return code;
 		}
 
 		@Override
 		public ArrayList<SearchNode> getSuccessors() {
 			// TODO Auto-generated method stub
 			ArrayList<SearchNode> suc = new ArrayList<SearchNode>();
-			for(ArmProblemNode apn : adjList.get(this)){
+			HashMap<ArmProblemNode, HashSet<ArmProblemNode>> tree = armRobot.getAdjList();
+			HashSet<ArmProblemNode> adjNodes = tree.get(this);
+			for(ArmProblemNode apn : adjNodes){
 				double suc_cost = cost;
 				for(int i = 0; i < link_num; i++)
-					suc_cost += Math.abs(apn.getConfig(i) - config[i]);
-				ArmProblemNode cur = new ArmProblemNode(apn.getConfig(), suc_cost + cost);
+					suc_cost += manhattan(apn.getConfig(i), config[i]) ;
+				ArmProblemNode cur = new ArmProblemNode(apn.getConfig(), suc_cost, armRobot);
 				suc.add(cur);
 			}
 			return suc;
@@ -256,7 +379,7 @@ public class ArmProblem extends SearchProblem {
 			double res = 0;
 			for (int i = 0; i < link_num; i++)
 				res += manhattan(config[i], goal_config[i]);
-			return res < 1;
+			return res < 0.01;
 		}
 
 		@Override
