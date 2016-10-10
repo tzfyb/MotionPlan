@@ -1,0 +1,13 @@
+\begin{figure}[!htb]
+\centering
+\begin{subfigure}{0.3\textwidth}
+  \includegraphics[width=\linewidth]{arm_1}
+\end{subfigure}
+\begin{subfigure}{0.3\textwidth}
+  \includegraphics[width=\linewidth]{arm_2}
+\end{subfigure}
+\begin{subfigure}{0.3\textwidth}
+  \includegraphics[width=\linewidth]{arm_3}
+\end{subfigure}
+\caption{Arm Motion Plan}
+\end{figure}

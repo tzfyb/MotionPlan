@@ -7,8 +7,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
 
-import planner.ArmProblem.ArmProblemNode;
-
 public class SteerCarProblem extends SearchProblem {
 	// six possible movement, {forward/backward, angle}
 	double[][] moves = { { 1, 0 }, { -1, 0 }, { 1, 1 }, { -1, -1 }, { 1, -1 }, { -1, 1 } };
@@ -24,9 +22,9 @@ public class SteerCarProblem extends SearchProblem {
 	HashSet<SteerCarNode> samples;
 	// Adjacent list of the tree
 	HashMap<SteerCarNode, HashSet<SteerCarNode>> rrt;
-	//move_ratio, indicates the difference between samples
+	// move_ratio, indicates the difference between samples
 	double mr;
-	
+
 	public SteerCarProblem(World w, double[] s, double[] g, int density, long seed, double move_ratio, int speed) {
 		start = new double[3];
 		for (int i = 0; i < 3; i++)
@@ -39,19 +37,20 @@ public class SteerCarProblem extends SearchProblem {
 		startNode = new SteerCarNode(start, this, -1);
 		samples = new HashSet<SteerCarNode>();
 		rrt = new HashMap<SteerCarNode, HashSet<SteerCarNode>>();
-		samples.add((SteerCarNode)startNode);
-		rrt.put((SteerCarNode)startNode, new HashSet<SteerCarNode>());
+		samples.add((SteerCarNode) startNode);
+		rrt.put((SteerCarNode) startNode, new HashSet<SteerCarNode>());
 		mr = move_ratio;
 		setVol(speed);
 		System.out.println("Tree Constructing...");
 		growTree(seed, density, move_ratio);
 	}
 
-	public void setVol(int ratio){
-		for(int i = 0; i < 6; i++){
+	public void setVol(int ratio) {
+		for (int i = 0; i < 6; i++) {
 			moves[i][0] *= ratio;
 		}
 	}
+
 	public double getRadius() {
 		return car_radius;
 	}
@@ -67,7 +66,8 @@ public class SteerCarProblem extends SearchProblem {
 	public HashMap<SteerCarNode, HashSet<SteerCarNode>> getRRT() {
 		return rrt;
 	}
-
+	public HashSet<SteerCarNode> getSamples(){return samples;}
+	// Construct the tree, two methods are used:
 	private void growTree(long seed, int density, double move_ratio) {
 		Random rd = new Random(seed);
 		while (samples.size() < density + 2) {
@@ -81,8 +81,8 @@ public class SteerCarProblem extends SearchProblem {
 			if (!rndCar.carCollide(world)) {
 				SteerCarNode nearest = nearestCar(rndCar);
 				SteerCarNode expandNode = expandTree(nearest, rndCar, move_ratio);
-				//if no such node that can be expand, exit
-				if(expandNode == null){
+				// if no such node that can be expand, exit
+				if (expandNode == null) {
 					System.out.println("Expand tree failed!");
 					System.exit(0);
 				}
@@ -98,13 +98,13 @@ public class SteerCarProblem extends SearchProblem {
 			}
 			System.out.println(Integer.toString(samples.size()) + "/" + Integer.toString(density + 2) + " Done!");
 		}
-		
-		if(samples.size() >= density + 2){
+
+		if (samples.size() >= density + 2) {
 			System.out.println("Fail to find a close enough node, use the closest node as the goal, which is:");
 			double dist = Double.MAX_VALUE;
 			SteerCarNode goalNearest = null;
-			for(SteerCarNode cur : samples){
-				if(cur.getDistance(getGoal()) < dist){
+			for (SteerCarNode cur : samples) {
+				if (cur.getDistance(getGoal()) < dist) {
 					goalNearest = cur;
 					dist = cur.getDistance(getGoal());
 				}
@@ -116,14 +116,15 @@ public class SteerCarProblem extends SearchProblem {
 		}
 	}
 
-	// Expand the tree with one node according to a random car node,
-	// by trying to expand the tree in 6 movements
+	// Decide the expanding node according to a random car node,
+	// by trying to expand the tree in 6 directions. This method
+	// us used by method growTree(long, int): void
 	private SteerCarNode expandTree(SteerCarNode nearest, SteerCarNode rndCar, double move_ratio) {
 		double minDis = Double.MAX_VALUE;
 		SteerCarNode expandCar = null;
 		for (int i = 0; i < 6; i++) {
 			SteerCarNode cur = nearest.moveCar(i, move_ratio);
-			if (!cur.carCollide(world) && !nearest.carPathCollide(world, i, move_ratio, 0.01)) {	
+			if (!cur.carCollide(world) && !nearest.carPathCollide(world, i, move_ratio, 0.01)) {
 				double dis = cur.getDistance(rndCar);
 				if (minDis > dis) {
 					minDis = dis;
@@ -133,8 +134,6 @@ public class SteerCarProblem extends SearchProblem {
 		}
 		return expandCar;
 	}
-	
-
 
 	// Get the nearest car node given a car node, this method
 	// is used by method growTree(long, int) : void
@@ -151,18 +150,19 @@ public class SteerCarProblem extends SearchProblem {
 		return nearest;
 	}
 
-	public List<SteerCarNode> smoothPath(List<SearchNode> path, double step_size){
+	// Interpolate intermediate paths to make the animation smoother
+	public List<SteerCarNode> smoothPath(List<SearchNode> path, double step_size) {
 		List<SteerCarNode> res = new ArrayList<SteerCarNode>();
-		res.add((SteerCarNode)(path.get(0)));
-		for(int i = 0; i < path.size() - 1; i++){
-			SteerCarNode curNode = (SteerCarNode)(path.get(i));
-			SteerCarNode nextNode = (SteerCarNode)(path.get(i + 1));
+		res.add((SteerCarNode) (path.get(0)));
+		for (int i = 0; i < path.size() - 1; i++) {
+			SteerCarNode curNode = (SteerCarNode) (path.get(i));
+			SteerCarNode nextNode = (SteerCarNode) (path.get(i + 1));
 			List<SteerCarNode> locPath = curNode.getPath(nextNode.getControl(), mr, step_size);
 			res.addAll(locPath);
 		}
 		return res;
 	}
-	
+
 	public class SteerCarNode implements SearchNode {
 		protected double[] state;
 		protected double cost;
@@ -202,9 +202,14 @@ public class SteerCarProblem extends SearchProblem {
 		public double getState(int i) {
 			return state[i];
 		}
-		
-		public int getControl(){return control;}
-		public SteerCarProblem getCar(){return carRobot;}
+
+		public int getControl() {
+			return control;
+		}
+
+		public SteerCarProblem getCar() {
+			return carRobot;
+		}
 
 		// Get the state of the car after a movement by a certain
 		// control after t time
@@ -256,9 +261,7 @@ public class SteerCarProblem extends SearchProblem {
 			double ang = Math.abs(state[2] - other.getState(2));
 			if (ang >= Math.PI)
 				ang = 2 * Math.PI - ang;
-			return Math.pow(
-					Math.pow(state[0] - other.getState(0), 2) + Math.pow(state[1] - other.getState(1), 2),
-					0.5);
+			return Math.pow(Math.pow(state[0] - other.getState(0), 2) + Math.pow(state[1] - other.getState(1), 2), 0.5);
 			// Weight angle more
 		}
 
@@ -275,14 +278,16 @@ public class SteerCarProblem extends SearchProblem {
 			return false;
 		}
 
-		public boolean carPathCollide(World w, int ctrl, double move_ratio, double step_size){
+		// Test if the path of the car collide with the world
+		// given a direction and a time
+		public boolean carPathCollide(World w, int ctrl, double move_ratio, double step_size) {
 			List<SteerCarNode> locPath = this.getPath(ctrl, move_ratio, step_size);
-			for(SteerCarNode inter : locPath)
-				if(inter.carCollide(world))
+			for (SteerCarNode inter : locPath)
+				if (inter.carCollide(world))
 					return true;
 			return false;
 		}
-		
+
 		// Test whether this car state intersect a rectangle
 		private boolean rectIntersect(Rectangle rect) {
 			double rect_x = rect.getCenterX();
@@ -292,7 +297,6 @@ public class SteerCarProblem extends SearchProblem {
 				return true;
 			return false;
 		}
-		
 
 		@Override
 		public boolean equals(Object o) {
